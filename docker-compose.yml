@@ -91,6 +91,9 @@ services:
       # 容器内用服务名互联，不是 localhost
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lwaiwork}
       REDIS_URL: redis://redis:6379
+      # 容器内网连 postgres 必须关闭 SSL（容器内 postgres 默认不启用 SSL）。
+      # 若改为连接外部托管数据库（RDS 等），设为 true。
+      DATABASE_SSL: ${DATABASE_SSL:-false}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须在 .env 中设置}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET 必须在 .env 中设置}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
