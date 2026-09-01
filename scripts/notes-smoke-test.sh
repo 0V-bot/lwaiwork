@@ -48,9 +48,9 @@ else
 fi
 
 UNIQUE_MARK="lwaiwork-smoke-${RANDOM_TAG}"
-TITLE_1="${UNIQUE_MARK} 一键三连"
-CONTENT_1="这是我用 ${UNIQUE_TAG:-RANDOM} 标记的唯一内容，搜索应该命中。$(printf '一二三四五六七八九十.'%.0s {1..40})"
-TAGS_1='["工作","重要"]'
+TITLE_1="${UNIQUE_MARK}-title"
+CONTENT_1="${UNIQUE_MARK}-content-repeating-repeating-repeating-repeating-repeating-repeating-repeating-repeating"
+TAGS_1='["work","important"]'
 
 # ---------------------------------------------------------------------------
 # 2. 创建笔记
@@ -102,13 +102,14 @@ fi
 # 5. PATCH 改 title
 # ---------------------------------------------------------------------------
 info "[5/11] PATCH /notes/:id（改 title 与加 tag）"
-NEW_TITLE="${UNIQUE_MARK} 修改版"
+NEW_TITLE="${UNIQUE_MARK}-edited"
+TAGS_PATCH='["work","important","tagged-after-edit"]'
 PATCH_BODY=$(curl -s -m 15 -X PATCH "${BASE_URL}/notes/${NOTE_ID}" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H 'Content-Type: application/json' \
-  -d "{\"title\":\"${NEW_TITLE}\",\"tags\":[\"工作\",\"重要\",\"编辑后\"]}")
+  -d "{\"title\":\"${NEW_TITLE}\",\"tags\":${TAGS_PATCH}}")
 if echo "${PATCH_BODY}" | grep -q "\"title\":\"${NEW_TITLE}\"" && \
-   echo "${PATCH_BODY}" | grep -q '编辑后'; then
+   echo "${PATCH_BODY}" | grep -q 'tagged-after-edit'; then
   pass "修改成功（title 重加密成功，tags 增量更新）"
 else
   fail "修改失败"
@@ -206,9 +207,9 @@ info "[10/11] 标签过滤 ?tag=工作"
 ALT_NOTE_BODY=$(curl -s -m 10 -X POST "${BASE_URL}/notes" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H 'Content-Type: application/json' \
-  -d "{\"title\":\"${UNIQUE_MARK} 工作笔记\",\"content\":\"用于标签过滤测试\",\"tags\":[\"工作\"]}")
+  -d "{\"title\":\"${UNIQUE_MARK} tag-filter-note\",\"content\":\"tag filter test\",\"tags\":[\"work\"]}")
 ALT_NOTE_ID=$(echo "${ALT_NOTE_BODY}" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-FILTER_BODY=$(curl -s -m 10 "${BASE_URL}/notes?tag=%E5%B7%A5%E4%BD%9C" -H "Authorization: Bearer ${TOKEN}")
+FILTER_BODY=$(curl -s -m 10 "${BASE_URL}/notes?tag=work" -H "Authorization: Bearer ${TOKEN}")
 if [ -n "${ALT_NOTE_ID}" ] && echo "${FILTER_BODY}" | grep -q "${ALT_NOTE_ID}"; then
   pass "标签过滤命中"
 else
