@@ -1,66 +1,59 @@
 # =============================================================================
-# lwaiwork backend - multi-stage build
+# lwaiwork backend - 极简 Dockerfile
 #
-# 2026-09-01 优化：用 node:20-bookworm-slim 替代 alpine。理由：
-#   - alpine 自带的 apk 包源在国内 ECS 拉取曾卡住 35 分钟
-#     (`apk add python3 make g++ libc6-compat` 进程一直被挂起)
-#   - Debian bookworm-slim 自带 build-essential/gcc/make，无需外部源
-#   - 镜像稍大（~150MB vs alpine ~50MB），但 build 稳定可控
-# 镜像源：npm 走 npmmirror.com（淘宝源），避免 Docker Hub network 抖动
+# 2026-09-01 优化（绕开 alpine / Debian 在国内 ECS 的网络卡死）：
+#   - base image: node:20-bookworm-slim（自带 node + tini-free 路径，
+#     但我们不用 tini —— 直接 CMD node 也行）
+#   - 不装 apt 包（不卡 build-essential），用 bcryptjs（纯 JS）替代 native bcrypt
+#   - npm registry 切 npmmirror.com（淘宝源）
+#   - 三阶段：deps（仅 install）→ build（仅 tsc）→ runtime（仅 dist + node_modules）
 # =============================================================================
 
-# ---------- Stage 1: install dependencies ----------------------------------
+# ---------- Stage 1: dependencies（无 native build） ---------------------
 FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 
-# bcrypt 是 native 模块，需要 build-essential（Debian 自带，但保险起见还是装）
-RUN apt-get update -q && apt-get install -y --no-install-recommends \
-    build-essential python3 && rm -rf /var/lib/apt/lists/*
-
-# 切到淘宝源（npm 默认 registry.docker-cn.com 在国内也偶有卡顿）
-ENV npm_config_registry=https://registry.npmmirror.com
+# npmmirror 国内源（避免 Docker Hub 抖动）
+ENV npm_config_registry=https://registry.npmmirror.com \
+    npm_config_loglevel=warn
 
 COPY package.json package-lock.json* ./
-# Install every dependency (dev included) because `nest build` needs the TS toolchain
-RUN npm ci --include=dev || npm install --include=dev
+# --omit=optional: 跳过 optional deps（如 fsevents），避免触发 prebuilt binary 网络
+# 但保留 main deps（含 bcryptjs）
+RUN npm ci --omit=optional
 
 # ---------- Stage 2: build --------------------------------------------------
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
-
-RUN apt-get update -q && apt-get install -y --no-install-recommends \
-    build-essential python3 && rm -rf /var/lib/apt/lists/*
 
 ENV npm_config_registry=https://registry.npmmirror.com
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npm run build
-
-# Strip devDependencies and rebuild native modules against the runtime base
-RUN npm prune --omit=dev && npm rebuild bcrypt
+# 单独 tsc 编译（不用 nest build 因为它会调 rimraf，沙箱偶有干扰；用 tsc 直跑同效果）
+RUN npx tsc -p tsconfig.build.json
 
 # ---------- Stage 3: runtime ------------------------------------------------
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
-ENV NODE_ENV=production
-# PORT=4000: ECS 8.130.181.74 already occupies 22 / 80 / 443 / 3000, so 3000 is
-# unusable. Container listens on 4000; docker-compose publishes it as 4001.
-ENV PORT=4000
+ENV NODE_ENV=production \
+    PORT=4000
 
-# tini + curl for healthcheck
-RUN apt-get update -q && apt-get install -y --no-install-recommends \
-    tini curl && rm -rf /var/lib/apt/lists/*
+# tini + curl（healthcheck 用）—— debian 镜像自带 curl 但 tini 没有
+# apt 安装最小集（已实测在阿里云 ECS mirrors 上秒级）
+RUN apt-get update -q && \
+    apt-get install -y --no-install-recommends tini curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
-# Run as a non-root user (least privilege)
-RUN groupadd -g 1001 -r nodejs && useradd -u 1001 -r nestjs -g nodejs
-RUN chown -R nestjs:nodejs /app
+# 非 root 用户
+RUN groupadd -g 1001 -r nodejs && useradd -u 1001 -r nestjs -g nodejs && \
+    chown -R nestjs:nodejs /app
 USER nestjs
 
 EXPOSE 4000
