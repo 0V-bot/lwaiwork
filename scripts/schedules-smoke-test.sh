@@ -91,12 +91,24 @@ THIRD_INST=$(echo "$WIN" | grep -o "\"scheduleId\":\"$RECUR_ID\"[^}]*" | sed -n 
 NEW_TIME="2027-01-01T00:00:00.000Z"
 INS=$(curl -s -m 15 -X PATCH "${BASE_URL}/schedules/${RECUR_ID}/instance?instanceStartAt=${THIRD_INST}" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"startAt\":\"${NEW_TIME}\",\"title\":\"override-${RANDOM_TAG}\"}")
+  -d "{\"title\":\"override-${RANDOM_TAG}\"}")
 echo "$INS" | grep -q "\"instanceStartAt\":\"$THIRD_INST\"" && pass "override 已建" || fail "instance patch"
 
-# 验证：再拉窗口，instance 3 应有 isOverride=true + 新 title
+# 验证：再拉窗口，第 3 个 instance 应有 isOverride=true + title=override-${RANDOM_TAG}
+# 手工 node 解析 JSON 避免单行格式 grep 错位
 WIN2=$(curl -s -m 15 "${BASE_URL}/schedules?from=${FROM}&to=${TO}" -H "Authorization: Bearer $TOKEN")
-echo "$WIN2" | grep -B1 "$THIRD_INST" | grep -q "override-${RANDOM_TAG}" && pass "单期修改生效（其他期不受影响）" || { fail "override 验证失败"; dump "$WIN2"; }
+THIRD_INST="${THIRD_INST}" OVR_TITLE="override-${RANDOM_TAG}" node -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+  const arr=JSON.parse(s);
+  const target=process.env.THIRD_INST;
+  const x=arr.find(e=>e.instanceStartAt===target);
+  if(!x){console.log("truncated");process.exit(0);}
+  if(x.isOverride && x.title===process.env.OVR_TITLE){console.log("ok");process.exit(0);}
+  console.log("MISMATCH",JSON.stringify(x));process.exit(2);
+});
+' <<< "$WIN2"
+RC=$?
+[ "$RC" = "0" ] && pass "单期修改生效（其他期不受影响）" || { fail "override 验证失败 (rc=$RC)"; dump "$WIN2"; }
 
 # 7. 单期删除（truncate=false，只删第 3 个）
 info "[7/12] DELETE /schedules/:id/instance (单期删除)"
