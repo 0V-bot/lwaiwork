@@ -22,7 +22,13 @@ ENV npm_config_registry=https://registry.npmmirror.com \
     npm_config_loglevel=warn
 
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=optional
+# Use `npm install` (not `npm ci`) so an outdated lockfile won't block build;
+# the deploy host has no way to run a separate lockfile-sync step, and
+# `npm install` is fast enough on the ECS mirror (~10-30s extra per build).
+# If lockfile is missing entirely, npm install generates a fresh one inside
+# the build stage - the host filesystem's lockfile (which may be outdated
+# from a Windows-side dev env) is NOT touched.
+RUN npm install --omit=optional --no-audit --no-fund
 
 # ---------- Stage 2: build (tsc only) ----------
 FROM node:20-bookworm-slim AS builder

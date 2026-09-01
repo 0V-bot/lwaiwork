@@ -55,6 +55,8 @@ async function bootstrap(): Promise<void> {
     .addTag('auth', 'Register / login / refresh / logout / me')
     .addTag('todos', 'End-to-end verification module (CRUD, per-user isolation)')
     .addTag('health', 'Liveness & readiness')
+    .addTag('dashboard', 'Aggregated today snapshot (todos + habits + schedules + notes + files)')
+    .addTag('analytics', 'M2-6 activity charts (per-day series + all-time summary, Redis-cached for 5 min)')
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);

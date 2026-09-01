@@ -10,7 +10,9 @@ FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 ENV npm_config_registry=https://registry.npmmirror.com
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=optional
+# Use `npm install` (not `npm ci`) so an outdated lockfile won't block build;
+# see backend/Dockerfile for the full rationale.
+RUN npm install --omit=optional --no-audit --no-fund
 
 # Stage 2: build
 FROM node:20-bookworm-slim AS builder

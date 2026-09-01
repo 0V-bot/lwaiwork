@@ -18,5 +18,6 @@ import { SchedulesController } from './schedules.controller';
   imports: [TypeOrmModule.forFeature([Schedule, ScheduleOverride])],
   controllers: [SchedulesController],
   providers: [SchedulesService],
+  exports: [SchedulesService],
 })
 export class SchedulesModule {}

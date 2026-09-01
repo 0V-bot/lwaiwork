@@ -9,5 +9,6 @@ import { HabitsController } from './habits.controller';
   imports: [TypeOrmModule.forFeature([Habit, HabitLog])],
   controllers: [HabitsController],
   providers: [HabitsService],
+  exports: [HabitsService],
 })
 export class HabitsModule {}

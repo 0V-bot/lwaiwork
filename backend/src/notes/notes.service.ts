@@ -325,6 +325,42 @@ export class NotesService implements OnModuleInit {
   }
 
   // ===========================================================================
+  // Dashboard helper
+  // ===========================================================================
+
+  /**
+   * Return the most-recently-updated notes (active + archived) for the
+   * dashboard widget. Decrypts titles only — bodies stay encrypted, so
+   * even a stolen JWT can't dump the user's writing through this route.
+   *
+   * No business method is touched; this is a thin wrapper over findAll's
+   * data path with a tighter limit and an "includeArchived=true" twist.
+   */
+  async findRecent(userId: string, limit = 5): Promise<NoteSummary[]> {
+    const rows = await this.notes.find({
+      where: { userId },
+      order: { updatedAt: 'DESC' },
+      take: Math.max(1, Math.min(limit, 100)),
+    });
+    return rows.map((row) => this.toSummary(row));
+  }
+
+  /**
+   * Count notes updated on-or-after `since`. The dashboard widget uses
+   * this to render the "7-day note count" tile independently from the
+   * 5-row preview list.
+   *
+   * No business method is touched.
+   */
+  async countRecent(userId: string, since: Date): Promise<number> {
+    return this.notes
+      .createQueryBuilder('n')
+      .where('n.user_id = :userId', { userId })
+      .andWhere('n.updated_at >= :since', { since })
+      .getCount();
+  }
+
+  // ===========================================================================
   // Internals
   // ===========================================================================
 

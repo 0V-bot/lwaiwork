@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository, type EntityManager } from 'typeorm';
+import { DataSource, IsNull, Repository, type EntityManager } from 'typeorm';
 import { Habit, type HabitFrequencyType } from './entities/habit.entity';
 import { HabitLog } from './entities/habit-log.entity';
 import { CreateHabitDto } from './dto/create-habit.dto';
@@ -409,6 +409,65 @@ export class HabitsService {
     const habit = await this.habits.findOne({ where: { id, userId } });
     if (!habit) throw new NotFoundException('Habit not found');
     return habit;
+  }
+
+  // ===========================================================================
+  // Dashboard helper
+  // ===========================================================================
+
+  /**
+   * Snapshot of every ACTIVE habit together with today's check-in state.
+   * Used by the dashboard widget so the user can mark today's habits in
+   * one click without leaving the home page.
+   *
+   * `scheduledToday` mirrors `isScheduledDay(today, habit)` so the list is
+   * already filtered to "needs a check-in today" — except we deliberately
+   * INCLUDE non-scheduled days too (a water-tracking habit whose frequency
+   * is "every 3 days" still shows up on off-days with `scheduledToday=false`
+   * so the user can see why it isn't required).
+   *
+   * The `completedAt` field is the row's `created_at` of the most recent
+   * today's log - the dashboard chip uses it to render "completed at HH:mm".
+   */
+  async findForToday(userId: string): Promise<
+    Array<{
+      habit: Habit;
+      scheduledToday: boolean;
+      todayCount: number;
+      todayCompleted: boolean;
+      completedAt: Date | null;
+    }>
+  > {
+    const today = utcToday();
+    const habits = await this.habits.find({
+      where: { userId, archivedAt: IsNull() },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (habits.length === 0) return [];
+
+    const habitIds = habits.map((h) => h.id);
+    const logs = await this.habitLogs
+      .createQueryBuilder('log')
+      .where('log.user_id = :userId', { userId })
+      .andWhere('log.habit_id IN (:...habitIds)', { habitIds })
+      .andWhere('log.date = :today', { today })
+      .getMany();
+
+    const logByHabit = new Map<string, HabitLog>();
+    for (const log of logs) logByHabit.set(log.habitId, log);
+
+    return habits.map((habit) => {
+      const log = logByHabit.get(habit.id) ?? null;
+      const todayCount = log?.count ?? 0;
+      return {
+        habit,
+        scheduledToday: isScheduledDay(today, habit),
+        todayCount,
+        todayCompleted: todayCount >= habit.targetCount,
+        completedAt: log?.createdAt ?? null,
+      };
+    });
   }
 
   private toHabitWithToday(habit: Habit, todayCount: number): HabitWithToday {

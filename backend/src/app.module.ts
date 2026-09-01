@@ -8,6 +8,9 @@ import { TodosModule } from './todos/todos.module';
 import { HabitsModule } from './habits/habits.module';
 import { NotesModule } from './notes/notes.module';
 import { SchedulesModule } from './schedules/schedules.module';
+import { FilesModule } from './files/files.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -25,6 +28,9 @@ import { HealthController } from './health/health.controller';
     HabitsModule,
     NotesModule,
     SchedulesModule,
+    FilesModule,
+    DashboardModule,
+    AnalyticsModule,
   ],
   controllers: [HealthController],
 })

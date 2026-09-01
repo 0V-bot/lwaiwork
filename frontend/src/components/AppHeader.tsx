@@ -15,10 +15,13 @@ import { useAuth } from '@/contexts/AuthContext';
  *   the page reads as "white paper with a faint crease".
  */
 const SECTIONS = [
+  { href: '/dashboard', label: '看板' },
+  { href: '/analytics', label: '数据' },
   { href: '/todos', label: '待办' },
   { href: '/habits', label: '习惯' },
   { href: '/schedules', label: '日程' },
   { href: '/notes', label: '笔记' },
+  { href: '/files', label: '文件' },
 ] as const;
 
 export function AppHeader() {

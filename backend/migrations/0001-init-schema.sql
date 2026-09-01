@@ -269,4 +269,66 @@ COMMENT ON COLUMN schedule_overrides.location          IS 'Override of location.
 COMMENT ON COLUMN schedule_overrides.reminder_minutes  IS 'Override of reminder minutes. NULL = inherit series.';
 COMMENT ON COLUMN schedule_overrides.truncate          IS '"This and future" tombstone. When set, the expansion engine stops emitting further instances from this schedule.';
 
+-- ---------------------------------------------------------------- files
+-- NOTE: appended at the 2026-09 milestone - older sections above are
+-- preserved verbatim so re-applying this file is still idempotent.
+--
+-- Files are owned by exactly one user. The blob bytes live in Aliyun OSS
+-- (keyed `users/<userId>/<uuid>.<ext>`); this table is the row-of-record
+-- for metadata + ETag + lifecycle, plus the per-user prefix that the
+-- confirm endpoint uses as the row's tenant boundary.
+CREATE TABLE IF NOT EXISTS files (
+    id            uuid           PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id       uuid           NOT NULL,
+    filename      varchar(255)   NOT NULL,
+    content_type  varchar(127)   NOT NULL,
+    size          bigint         NOT NULL,
+    oss_key       varchar(255)   NOT NULL,
+    oss_bucket    varchar(64)    NOT NULL,
+    etag          varchar(64)    NOT NULL,
+    is_image      boolean        NOT NULL DEFAULT false,
+    width         int            NULL,
+    height        int            NULL,
+    archived_at   timestamptz    NULL,
+    created_at    timestamptz    NOT NULL DEFAULT now(),
+    updated_at    timestamptz    NOT NULL DEFAULT now(),
+
+    CONSTRAINT fk_files_user FOREIGN KEY (user_id)
+        REFERENCES users (id) ON DELETE CASCADE,
+    -- Globally unique: two rows pointing at the same OSS object would be
+    -- impossible to reason about under deletes (the OSS key collides on
+    -- confirm anyway because the UUID inside it is random per ticket).
+    CONSTRAINT uq_files_oss_key UNIQUE (oss_key)
+);
+
+-- Hot path: "list my files, recent edit first"
+--   WHERE user_id = ? ORDER BY updated_at DESC
+-- Default list view also filters `archived_at IS NULL`, but we keep this
+-- a plain btree rather than a partial index: the dataset per user is
+-- small (< a few thousand rows for MVP) and the planner is happy enough
+-- with the regular index.
+CREATE INDEX IF NOT EXISTS idx_files_user_updated ON files (user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_files_user_id      ON files (user_id);
+
+-- Length sanity checks (cheap to enforce at the DB layer; the API also
+-- validates before INSERT). `oss_bucket` is constrained so a single
+-- accidental row never claims a bucket name 100 KiB long.
+ALTER TABLE files
+    ADD CONSTRAINT chk_files_size_positive      CHECK (size > 0),
+    ADD CONSTRAINT chk_files_filename_nonempty  CHECK (length(filename) > 0),
+    ADD CONSTRAINT chk_files_oss_key_shape      CHECK (oss_key ~ '^users/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\.[a-z0-9]{1,8}$'),
+    ADD CONSTRAINT chk_files_oss_bucket_shape   CHECK (length(oss_bucket) BETWEEN 1 AND 64);
+
+COMMENT ON COLUMN files.user_id       IS 'Owner. Every query MUST filter on it (per-user isolation). Mirrors the ossKey prefix `users/<user_id>/`.';
+COMMENT ON COLUMN files.filename      IS 'Bare object name (uuid + ext). Intentionally NOT the user-supplied filename - that stays out of the OSS path to avoid leaking metadata into the bucket key.';
+COMMENT ON COLUMN files.content_type  IS 'MIME as declared at upload-ticket time and re-checked against the whitelist (image/* / application/pdf / text/* (not html) / application/json / application/zip).';
+COMMENT ON COLUMN files.size          IS 'Final size in bytes as reported by /files/confirm. Bounded to <= 100 MiB at the API + DTO + POST policy.';
+COMMENT ON COLUMN files.oss_key       IS 'Globally-unique OSS object key. Format: users/<userId>/<uuid>.<ext>. The prefix is the per-tenant boundary; confirm-upload verifies oss_key STARTS WITH users/${user_id}/ before persisting.';
+COMMENT ON COLUMN files.oss_bucket    IS 'Bucket name. Currently always "lwaiwork"; kept on-row so future migration to a per-tenant bucket is row-by-row traceable.';
+COMMENT ON COLUMN files.etag          IS 'ETag returned by the OSS PUT response (quotes included).';
+COMMENT ON COLUMN files.is_image      IS 'Derived at confirm time from the extension; flips UI to thumbnail renderer.';
+COMMENT ON COLUMN files.width         IS 'Pixel width. Only set when is_image = true; client supplies it from a pre-upload probe.';
+COMMENT ON COLUMN files.height        IS 'Pixel height. Same rules as width.';
+COMMENT ON COLUMN files.archived_at   IS 'Soft archive marker (NULL = active). Mirrors notes / schedules / habits convention: plain nullable column (not @DeleteDateColumn) so un-archive stays symmetric. Underlying OSS object is best-effort deleted on archive to prevent orphans.';
+
 COMMIT;

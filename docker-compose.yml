@@ -100,6 +100,15 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET 必须在 .env 中设置}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      # Files 模块 - 阿里云 OSS（直传 + 列表 + 临时签名下载）。容器内 host 的
+      # .env 路径跟容器内不一致，所以必须显式注入 ${VAR:-} 占位；由 host 的
+      # .env（或 /opt/lwaiwork/scripts/.aliyun-ak 脚本注入）映射进来。
+      # 真实 AK/SK 永不入版本库 - 详见 backend/.env.example 的 SECURITY 段。
+      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
+      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
+      OSS_REGION: ${OSS_REGION:-oss-cn-hangzhou}
+      OSS_BUCKET: ${OSS_BUCKET:-lwaiwork}
+      OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-hangzhou.aliyuncs.com}
       # 生产务必关掉 synchronize，改用 migrations
       TYPEORM_SYNCHRONIZE: ${TYPEORM_SYNCHRONIZE:-true}
       TZ: Asia/Shanghai

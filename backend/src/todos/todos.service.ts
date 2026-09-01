@@ -99,4 +99,55 @@ export class TodosService {
     await this.todos.softDelete({ id, userId });
     return { message: 'Todo deleted' };
   }
+
+  // ===========================================================================
+  // Dashboard helper
+  // ===========================================================================
+
+  /**
+   * Return open (done=false) todos whose dueAt is on-or-before today, ordered
+   * by dueAt ASC then createdAt DESC. Powers the dashboard widget that
+   * surfaces "what's due / overdue" without paginating.
+   *
+   * `limit` defaults to 10 so a heavy backlog can't overflow the dashboard
+   * payload.
+   *
+   * No business method is touched - this is a read-only helper.
+   */
+  async findOpen(
+    userId: string,
+    limit = 10,
+  ): Promise<
+    Array<Pick<Todo, 'id' | 'title' | 'dueAt' | 'createdAt'>>
+  > {
+    const today = new Date();
+    const rows = await this.todos
+      .createQueryBuilder('t')
+      .select(['t.id AS id', 't.title AS title', 't.due_at AS dueAt', 't.created_at AS createdAt'])
+      .where('t.user_id = :userId', { userId })
+      .andWhere('t.done = false')
+      .andWhere('t.due_at IS NOT NULL')
+      .andWhere('t.due_at <= :today', { today })
+      .orderBy('t.due_at', 'ASC')
+      .addOrderBy('t.created_at', 'DESC')
+      .limit(limit)
+      .getRawMany();
+    return rows.map((r) => ({
+      id: r.id as string,
+      title: r.title as string,
+      dueAt: r.dueAt ? new Date(r.dueAt as string) : null,
+      createdAt: new Date(r.createdAt as string),
+    }));
+  }
+
+  /**
+   * Total count of open (done=false) todos. Used by the dashboard widget
+   * so the top counter reflects the full backlog rather than the
+   * `findOpen(limit)` page slice.
+   *
+   * No business method is touched.
+   */
+  async countOpen(userId: string): Promise<number> {
+    return this.todos.count({ where: { userId, done: false } });
+  }
 }
