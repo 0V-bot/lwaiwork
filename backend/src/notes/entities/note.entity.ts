@@ -34,9 +34,11 @@ import {
  */
 @Entity({ name: 'notes' })
 @Index('IDX_notes_user_updated', ['userId', 'updatedAt'])
-@Index('IDX_notes_user_active', ['userId'], {
-  where: '`archived_at` IS NULL',
-})
+// 部分索引 `WHERE archived_at IS NULL` 在 PG 上 emit 的 SQL 被加了反引号
+// （"syntax error at or near NULL"），导致 synchronize 失败 → backend 重启循环。
+// 这条索引对本模块不是必需的：`IDX_notes_user_updated` (user_id, updated_at) 已
+// 加速默认列表；includeArchived=true 的全量分页是低频路径。
+// 后续若需要大表优化，走 migration 加 `CREATE INDEX ... WHERE archived_at IS NULL`。
 export class Note {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
