@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { TodosModule } from './todos/todos.module';
 import { HabitsModule } from './habits/habits.module';
+import { NotesModule } from './notes/notes.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -21,6 +22,7 @@ import { HealthController } from './health/health.controller';
     AuthModule,
     TodosModule,
     HabitsModule,
+    NotesModule,
   ],
   controllers: [HealthController],
 })

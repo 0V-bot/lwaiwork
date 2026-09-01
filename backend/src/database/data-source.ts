@@ -8,6 +8,7 @@ import { User } from '../users/user.entity';
 import { Todo } from '../todos/todo.entity';
 import { Habit } from '../habits/entities/habit.entity';
 import { HabitLog } from '../habits/entities/habit-log.entity';
+import { Note } from '../notes/entities/note.entity';
 
 config({ path: '.env' });
 
@@ -16,7 +17,7 @@ const synchronize = process.env.TYPEORM_SYNCHRONIZE === 'true';
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
   url: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/lwaiwork',
-  entities: [User, Todo, Habit, HabitLog],
+  entities: [User, Todo, Habit, HabitLog, Note],
   migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
   synchronize,
   dropSchema: false,

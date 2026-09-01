@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 const SECTIONS = [
   { href: '/todos', label: '待办' },
   { href: '/habits', label: '习惯' },
+  { href: '/notes', label: '笔记' },
 ] as const;
 
 export function AppHeader() {

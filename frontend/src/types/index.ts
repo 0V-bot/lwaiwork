@@ -130,3 +130,72 @@ export interface HabitLog {
   note: string | null;
   createdAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Notes — mirrors backend/src/notes/{notes.service.ts, dto/*.ts, entities/*}.
+//
+// Notes are encrypted at rest with AES-256-GCM (see backend crypto-aes-gcm).
+// The list / search responses omit the body to keep payloads small; only the
+// previews are exposed. Full body comes through GET /notes/:id. From the
+// front-end's point of view everything is plaintext — no key material lives
+// in the browser.
+//
+// All dates are ISO-8601 strings (JSON never revives Date). `archivedAt`
+// is null for active notes and an ISO string once soft-archived; soft-archive
+// is the same row state manipulated by DELETE /notes/:id.
+// ---------------------------------------------------------------------------
+
+/** Curated 6-swatch palette mirrored on the picker UI. Must match the backend
+ *  regex `/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/`. */
+export const NOTE_COLOR_OPTIONS = [
+  '#2FAF9E',
+  '#5B8DEF',
+  '#F59E0B',
+  '#E26D8A',
+  '#8B5CF6',
+  '#1D9A75',
+] as const;
+
+export const NOTE_TAGS_MAX = 32;
+export const NOTE_TAG_MAX_LEN = 32;
+/** 50 KiB UTF-8 hard cap enforced by the backend. */
+export const NOTE_CONTENT_MAX_BYTES = 50 * 1024;
+export const NOTE_TITLE_MAX_LEN = 200;
+
+/** List-row projection returned by GET /notes and POST /notes/search.
+ *  No `content` field on purpose - the frontend never renders the full body
+ *  from a list call. */
+export interface NoteSummary {
+  id: string;
+  title: string;
+  preview: string;
+  tags: string[];
+  /** Hex #RGB or #RRGGBB (see NOTE_COLOR_OPTIONS for the curated values). */
+  color: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Detail projection returned by GET /notes/:id and the create / update flows. */
+export interface NoteDetail extends NoteSummary {
+  content: string;
+}
+
+/** Create payload - mirrors backend CreateNoteDto. */
+export interface CreateNotePayload {
+  title: string;
+  content: string;
+  tags?: string[];
+  color?: string;
+}
+
+/** Patch payload - every field optional; only the fields present are sent to
+ *  PATCH /notes/:id so the backend re-encrypts only what changed. */
+export type UpdateNotePayload = Partial<CreateNotePayload>;
+
+/** Search payload - mirrors backend SearchNoteDto. */
+export interface SearchNotePayload {
+  query: string;
+  tag?: string;
+}
