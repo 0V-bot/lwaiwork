@@ -94,6 +94,8 @@ services:
       # 容器内网连 postgres 必须关闭 SSL（容器内 postgres 默认不启用 SSL）。
       # 若改为连接外部托管数据库（RDS 等），设为 true。
       DATABASE_SSL: ${DATABASE_SSL:-false}
+      # Notes 模块需要 master key 来做 AES-256-GCM；不传则模块拒绝写操作
+      MASTER_KEY: ${MASTER_KEY:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须在 .env 中设置}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET 必须在 .env 中设置}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
