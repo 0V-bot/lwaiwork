@@ -77,6 +77,23 @@ function listFiles() {
 }
 
 // ---------------------------------------------------------------------------
+// 读取本地最新 commit 的 message 作为远端 commit message
+//
+// 坑（2026-09-01 实战）：早期版本把 message 硬编码在脚本里，导致本地提交的是
+// "fix: 数据库连接 SSL..."、推到远端却显示上一次的 "feat: lwaiwork M1..."。
+// 现在改为直接复用本地 git 的提交信息，保证两边一致。
+// ---------------------------------------------------------------------------
+function localCommitMessage() {
+  try {
+    const msg = execSync('git log -1 --pretty=%B', { cwd: ROOT, encoding: 'utf8' }).trim();
+    if (msg) return msg;
+  } catch {
+    /* 本地无 commit 时回退到默认文案 */
+  }
+  return 'chore: 通过 GitHub API 同步代码';
+}
+
+// ---------------------------------------------------------------------------
 // 主流程
 // ---------------------------------------------------------------------------
 (async () => {
@@ -127,35 +144,8 @@ function listFiles() {
   } catch (e) {
     console.log('  仓库为空，创建首个 commit（无 parent）');
   }
-  const message = `feat: lwaiwork M1 最简链路（注册登录 + todos 端到端）
-
-B 路径第一里程碑：跑通"代码 -> 部署"最简链路。
-
-后端（NestJS 10 + TypeORM + PostgreSQL 16 + Redis 7）
-- auth: register/login/refresh/logout/me，JWT access 15m + refresh 7d
-- todos: 完整 CRUD，userId 行级隔离，软删除，分页
-- users / health / database / redis 模块
-- 全局前缀 /api，Swagger /api-json
-- ValidationPipe 开 whitelist + forbidNonWhitelisted
-- 端口 4000（ECS 3000 已被现有项目占用，从 3000 迁出）
-
-前端（Next.js 14 App Router + React 18 + TS + Tailwind）
-- 页面：/ /login /register /todos
-- lib/api.ts: Bearer 自动注入 + 401 自动 refresh 重试
-- AuthContext + AuthGuard 路由保护
-- output: standalone，多阶段 Dockerfile
-- 视觉：白底 + 蓝绿主色，简约克制
-
-部署编排
-- docker-compose.yml: 4 服务，端口全部避开 ECS 已占用的 22/80/443/3000
-  postgres 5433->5432 / redis 6380->6379 / backend 4001->4000 / frontend 3001->3000
-- scripts/smoke-test.sh: 5 检查点端到端验证
-- 命名卷持久化 + 全服务 healthcheck + 日志轮转
-
-验证状态
-- backend: npx tsc --noEmit 0 报错
-- frontend: npx tsc --noEmit 0 报错
-- 尚未在 ECS 上真实部署验证（下一步）`;
+  const message = localCommitMessage();
+  console.log(`  使用本地 commit message: ${message.split('\n')[0]}`);
 
   const commitBody = { message, tree: tree.sha };
   if (parentSha) commitBody.parents = [parentSha];
