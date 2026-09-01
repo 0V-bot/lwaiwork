@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-white font-sans text-ink;
+  }
+
+  /* Never show a number spinner on the filter/limit inputs. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+@layer utilities {
+  /* Thin teal focus ring used by the inline "add todo" input. */
+  .underline-input {
+    @apply border-0 border-b border-line bg-transparent px-0 py-2.5 text-[15px] text-ink outline-none transition-colors placeholder:text-ink-muted/50 focus:border-teal-500;
+  }
+}

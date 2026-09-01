@@ -1,0 +1,165 @@
+# =============================================================================
+# lwaiwork - B 路径 M1 最简链路（注册登录 + todos 端到端）
+#
+# 端口规划说明（重要 - 基于 ECS 8.130.181.74 实测）
+# -----------------------------------------------------------------------------
+# ECS 已被现有项目占用：22 / 80 / 443 / 3000
+# 因此本工程所有宿主机端口必须避开这四个：
+#
+#   服务       宿主机端口   容器端口   说明
+#   postgres   5433        5432       避开常见的 5432（防止与宿主机已有 PG 撞）
+#   redis      6380        6379       避开常见的 6379
+#   backend    4001        4000       backend 进程监听 4000，对外映射 4001
+#   frontend   3001        3000       3000 已被占用，对外映射 3001
+#
+# 容器内互联一律使用 docker 服务名（postgres / redis / backend），不用 localhost。
+# =============================================================================
+
+name: lwaiwork
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: lwaiwork-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-lwaiwork}
+      # 中文排序与 UTF-8 初始化
+      LANG: C.UTF-8
+      TZ: Asia/Shanghai
+    ports:
+      # 宿主机 5433 -> 容器 5432（避开 5432 与已占用端口）
+      - "5433:5432"
+    volumes:
+      - lwaiwork_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-lwaiwork}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Redis 7（refresh token + 后续缓存）
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: lwaiwork-redis
+    restart: unless-stopped
+    # appendonly 保证重启后 refresh token 不丢
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      # 宿主机 6380 -> 容器 6379
+      - "6380:6379"
+    volumes:
+      - lwaiwork_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Backend（NestJS）
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lwaiwork-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # 容器内监听 4000，对外由 ports 映射为 4001
+      PORT: "4000"
+      # 容器内用服务名互联，不是 localhost
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lwaiwork}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须在 .env 中设置}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET 必须在 .env 中设置}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      # 生产务必关掉 synchronize，改用 migrations
+      TYPEORM_SYNCHRONIZE: ${TYPEORM_SYNCHRONIZE:-true}
+      TZ: Asia/Shanghai
+    ports:
+      # 宿主机 4001 -> 容器 4000（避开已占用的 3000）
+      - "4001:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Frontend（Next.js 14 standalone）
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # 关键：NEXT_PUBLIC_* 在 BUILD 时被内联进浏览器 bundle
+        # 所以这里必须填「浏览器能解析」的地址，不能填 docker 服务名
+        #   - 服务器 IP 直连验证：http://8.130.181.74:4001/api
+        #   - 生产域名（配好 Nginx + SSL 后）：https://api.wb.lwai.work/api
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://8.130.181.74:4001/api}
+    container_name: lwaiwork-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      NEXT_TELEMETRY_DISABLED: "1"
+      TZ: Asia/Shanghai
+    ports:
+      # 宿主机 3001 -> 容器 3000（3000 已被现有项目占用）
+      - "3001:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+# -----------------------------------------------------------------------------
+# 命名卷（数据持久化，docker compose down 不会丢，需 down -v 才会删）
+# -----------------------------------------------------------------------------
+volumes:
+  lwaiwork_pgdata:
+  lwaiwork_redisdata:
