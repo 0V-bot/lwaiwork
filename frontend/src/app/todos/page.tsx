@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { AppHeader } from '@/components/AppHeader';
 import { AuthGuard } from '@/components/AuthGuard';
 import { TodoItem } from '@/components/TodoItem';
-import { useAuth } from '@/contexts/AuthContext';
 import { api, toErrorMessage } from '@/lib/api';
 import type { Paginated, Todo } from '@/types';
 
@@ -29,8 +29,6 @@ export default function TodosPage() {
 }
 
 function TodosScreen() {
-  const { user, logout } = useAuth();
-
   const [todos, setTodos] = useState<Todo[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [title, setTitle] = useState('');
@@ -122,37 +120,10 @@ function TodosScreen() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* ---------------------------------------------------------- app bar */}
-      <header className="border-b border-line">
-        <div className="mx-auto flex h-16 w-full max-w-2xl items-center justify-between px-6">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-teal-500">
-              <svg viewBox="0 0 32 32" className="h-3.5 w-3.5" aria-hidden>
-                <path
-                  d="M9 16.8l4.2 4.2L23 11.2"
-                  fill="none"
-                  stroke="#ffffff"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-            <span className="text-[15px] font-semibold tracking-tight text-ink">lwaiwork</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="hidden text-[13px] text-ink-muted sm:inline">{user?.email}</span>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="rounded text-[13px] text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
-            >
-              退出
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* BUG-B fix (2026-09-01): 用共享 AppHeader 替代原本硬编码的 header。
+          原本的 header 没有"习惯" tab，导致在 /todos 上无法切回 /habits。
+          AppHeader 同时包含"待办 / 习惯"两个跳转锚点，且高亮当前页。 */}
+      <AppHeader />
 
       {/* ------------------------------------------------------------ body */}
       <main className="mx-auto w-full max-w-2xl px-6 pb-24 pt-12">

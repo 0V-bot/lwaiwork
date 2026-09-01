@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { clearSession, hasStoredSession, readStoredUser } from '@/lib/auth';
 import type { AuthResponse, User } from '@/types';
 
@@ -42,16 +42,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Paint immediately from the cached projection to avoid a flash.
+      // Paint immediately from the cached projection so the user lands in the
+      // app with zero visible reload flicker.
       const cached = readStoredUser();
       if (cached && !cancelled) setUser(cached);
 
       try {
         const me = await api.get<User>('/auth/me');
         if (!cancelled) setUser(me);
-      } catch {
-        clearSession();
-        if (!cancelled) setUser(null);
+      } catch (err) {
+        // BUG-A fix (2026-09-01): only clear the session on a real 401
+        // (refresh token genuinely expired). Network blips, CORS hiccups,
+        // and 5xx should NOT log the user out on reload - that's the
+        // difference between "remember me" and "force me to re-login".
+        if (err instanceof ApiError && err.status === 401) {
+          clearSession();
+          if (!cancelled) setUser(null);
+        } else {
+          // Keep cached user, log for diagnostics only.
+          // AuthGuard only redirects when `!user && !loading`, so a
+          // transient failure here does not bounce the user to /login.
+          console.warn('[AuthContext] /auth/me 失败，保留本地登录态:', err);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
