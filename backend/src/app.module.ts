@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { TodosModule } from './todos/todos.module';
 import { HabitsModule } from './habits/habits.module';
 import { NotesModule } from './notes/notes.module';
+import { SchedulesModule } from './schedules/schedules.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -23,6 +24,7 @@ import { HealthController } from './health/health.controller';
     TodosModule,
     HabitsModule,
     NotesModule,
+    SchedulesModule,
   ],
   controllers: [HealthController],
 })

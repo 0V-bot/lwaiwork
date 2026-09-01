@@ -199,3 +199,168 @@ export interface SearchNotePayload {
   query: string;
   tag?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Schedules — mirrors backend/src/schedules/{service, dto, entities}.
+//
+// Notes are encrypted at rest with AES-256-GCM; schedules are plaintext on
+// purpose (same rule as todos / habits - this app only encrypts whatever
+// needs to be hidden from the row-level scan, and event titles/locations
+// aren't on that list).
+//
+// All dates are ISO-8601 strings (JSON never revives Date). `archivedAt` is
+// null for active series and an ISO string once soft-archived; soft-archive
+// is the same row state manipulated by DELETE /schedules/:id.
+//
+// RRULE is stored WITHOUT a DTSTART prefix - the service rebinds it to
+// `startAt` + `timezone` at expansion time, so a single source of truth
+// for the first instance.
+// ---------------------------------------------------------------------------
+
+/** Curated 6-swatch palette mirrored on the picker UI. Must match the backend
+ *  regex `/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/`. */
+export const SCHEDULE_COLOR_OPTIONS = [
+  '#2FAF9E',
+  '#5B8DEF',
+  '#F59E0B',
+  '#E26D8A',
+  '#8B5CF6',
+  '#1D9A75',
+] as const;
+
+/** IANA timezones offered as quick-pick chips in TimezoneSelect. */
+export const SCHEDULE_TIMEZONE_PRESETS = [
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'UTC',
+  'America/Los_Angeles',
+] as const;
+
+/** Reminder offset chips (minutes BEFORE startAt). Capped server-side at 1 week. */
+export const SCHEDULE_REMINDER_OPTIONS = [5, 10, 15, 30, 60] as const;
+
+export const SCHEDULE_TITLE_MAX_LEN = 200;
+/** 10 KiB; same cap as the backend DESCRIPTION_MAX_LEN. */
+export const SCHEDULE_DESCRIPTION_MAX_LEN = 10_240;
+export const SCHEDULE_LOCATION_MAX_LEN = 200;
+/** Server caps each value at 1 week (60 * 24 * 7). */
+export const SCHEDULE_REMINDER_MAX_VAL = 60 * 24 * 7;
+export const SCHEDULE_REMINDER_MAX_LEN = 16;
+
+/** Full row returned by POST /schedules, PATCH /schedules/:id, GET /schedules/:id
+ *  (the latter wraps it inside `ScheduleDetail.schedule`). */
+export interface Schedule {
+  id: string;
+  userId: string;
+  title: string;
+  /** Plaintext description. Null when omitted. */
+  description: string | null;
+  /** UTC moment. For a recurring series this is the DTSTART. */
+  startAt: string;
+  /** Optional end. Null = open-ended / start-only event. */
+  endAt: string | null;
+  /** IANA tz, e.g. "Asia/Shanghai". Required even for single events. */
+  timezone: string;
+  allDay: boolean;
+  /** RRULE line WITHOUT a DTSTART prefix. Null = non-recurring. */
+  rrule: string | null;
+  /** Black-listed instance starts (UTC). Each is an ISO datetime. */
+  exdates: string[];
+  location: string | null;
+  reminderMinutes: number[];
+  /** Hex token #RGB or #RRGGBB. */
+  color: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Output row from `GET /schedules?from=&to=&includeArchived=`. One row per
+ *  occurrence (after override merge). Sorted ascending by `instanceStartAt`. */
+export interface ScheduleInstance {
+  scheduleId: string;
+  /** FINAL startAt for this occurrence (post-override). */
+  instanceStartAt: string;
+  endAt: string | null;
+  title: string;
+  description: string | null;
+  allDay: boolean;
+  /** IANA tz surfaced for date math / UX. */
+  timezone: string;
+  location: string | null;
+  color: string;
+  reminderMinutes: number[] | null;
+  isOverride: boolean;
+}
+
+/** Composite PK = (scheduleId, instanceStartAt). The `truncate = true` row is
+ *  the "this and future" tombstone written by DELETE with truncate. */
+export interface ScheduleOverride {
+  scheduleId: string;
+  instanceStartAt: string;
+  title: string | null;
+  description: string | null;
+  startAt: string | null;
+  endAt: string | null;
+  allDay: boolean | null;
+  location: string | null;
+  reminderMinutes: number[] | null;
+  truncate: boolean;
+}
+
+/** Detail projection: schedule row + ALL of its overrides. `overrides` is sorted
+ *  ascending by `instanceStartAt` per the service contract. */
+export interface ScheduleDetail {
+  schedule: Schedule;
+  overrides: ScheduleOverride[];
+}
+
+/** Create payload - mirrors CreateScheduleDto. */
+export interface CreateSchedulePayload {
+  title: string;
+  description?: string;
+  startAt: string;
+  endAt?: string;
+  timezone: string;
+  allDay?: boolean;
+  /** Null or empty string = non-recurring. */
+  rrule?: string | null;
+  exdates?: string[];
+  location?: string;
+  reminderMinutes?: number[];
+  color?: string;
+}
+
+/** Patch payload - only the fields the user actually changed are sent. */
+export interface UpdateSchedulePayload {
+  title?: string;
+  description?: string | null;
+  startAt?: string;
+  endAt?: string | null;
+  timezone?: string;
+  allDay?: boolean;
+  /** Empty string or null clears the recurrence. */
+  rrule?: string | null;
+  exdates?: string[];
+  location?: string | null;
+  reminderMinutes?: number[];
+  color?: string;
+  /** ISO datetime to archive, or null to restore. */
+  archivedAt?: string | null;
+}
+
+/** Per-instance edit payload - mirrors UpdateInstanceDto. Only non-null
+ *  fields are persisted; null means "inherit series default at expansion". */
+export interface UpdateInstancePayload {
+  title?: string;
+  description?: string | null;
+  startAt?: string;
+  endAt?: string | null;
+  allDay?: boolean;
+  location?: string | null;
+  reminderMinutes?: number[];
+  color?: string;
+}
+
+/** Window presets for `/schedules` secondary nav. */
+export type ScheduleWindow = 'today' | '7d' | '30d';

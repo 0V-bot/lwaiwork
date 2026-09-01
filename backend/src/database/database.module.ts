@@ -6,6 +6,8 @@ import { Todo } from '../todos/todo.entity';
 import { Habit } from '../habits/entities/habit.entity';
 import { HabitLog } from '../habits/entities/habit-log.entity';
 import { Note } from '../notes/entities/note.entity';
+import { Schedule } from '../schedules/entities/schedule.entity';
+import { ScheduleOverride } from '../schedules/entities/schedule-override.entity';
 
 @Global()
 @Module({
@@ -51,7 +53,7 @@ import { Note } from '../notes/entities/note.entity';
         return {
           type: 'postgres',
           url: config.get<string>('DATABASE_URL'),
-          entities: [User, Todo, Habit, HabitLog, Note],
+          entities: [User, Todo, Habit, HabitLog, Note, Schedule, ScheduleOverride],
           migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
           // SECURITY/SAFETY: dropSchema is NEVER enabled.
           synchronize,
