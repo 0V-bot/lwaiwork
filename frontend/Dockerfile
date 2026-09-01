@@ -1,9 +1,18 @@
 # --------------------------------------------------------------------------
-# Stage 1 - dependencies
-# Installed in isolation so Docker can cache this layer across code changes.
+# lwaiwork frontend - multi-stage build
+#
+# 2026-09-01 优化：用 node:20-bookworm-slim 替代 alpine
+#   （同 backend，详见后端 Dockerfile 注释）
+#   npm 切到淘宝源 npmmirror.com
 # --------------------------------------------------------------------------
-FROM node:20-alpine AS deps
+
+# --------------------------------------------------------------------------
+# Stage 1 - dependencies
+# --------------------------------------------------------------------------
+FROM node:20-bookworm-slim AS deps
 WORKDIR /app
+
+ENV npm_config_registry=https://registry.npmmirror.com
 
 COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
@@ -14,8 +23,10 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 # API URL MUST be passed as a build-arg here. Setting it at runtime later has
 # no effect.
 # --------------------------------------------------------------------------
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 WORKDIR /app
+
+ENV npm_config_registry=https://registry.npmmirror.com
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -31,7 +42,7 @@ RUN npm run build
 # `output: 'standalone'` (next.config.mjs) makes Next emit a self-contained
 # server.js with only the node_modules it actually needs.
 # --------------------------------------------------------------------------
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -39,7 +50,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+RUN groupadd -g 1001 -r nodejs && useradd -u 1001 -r nextjs -g nodejs
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
