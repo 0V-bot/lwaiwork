@@ -21,7 +21,7 @@ export default function LoginPage() {
 
   // Already signed in (e.g. arriving via a stale tab) - skip the form.
   useEffect(() => {
-    if (!loading && user) router.replace('/todos');
+    if (!loading && user) router.replace('/habits');
   }, [loading, user, router]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -42,7 +42,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      router.replace('/todos');
+      router.replace('/habits');
     } catch (error) {
       // A 401 from the backend is deliberately generic ("Invalid email or
       // password") and class-validator may also return an array of rules, which

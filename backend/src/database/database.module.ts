@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { User } from '../users/user.entity';
 import { Todo } from '../todos/todo.entity';
+import { Habit } from '../habits/entities/habit.entity';
+import { HabitLog } from '../habits/entities/habit-log.entity';
 
 @Global()
 @Module({
@@ -48,7 +50,7 @@ import { Todo } from '../todos/todo.entity';
         return {
           type: 'postgres',
           url: config.get<string>('DATABASE_URL'),
-          entities: [User, Todo],
+          entities: [User, Todo, Habit, HabitLog],
           migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
           // SECURITY/SAFETY: dropSchema is NEVER enabled.
           synchronize,

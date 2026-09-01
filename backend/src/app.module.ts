@@ -5,6 +5,7 @@ import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { TodosModule } from './todos/todos.module';
+import { HabitsModule } from './habits/habits.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -19,6 +20,7 @@ import { HealthController } from './health/health.controller';
     UsersModule,
     AuthModule,
     TodosModule,
+    HabitsModule,
   ],
   controllers: [HealthController],
 })
