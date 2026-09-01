@@ -2,22 +2,23 @@
 # ============================================================================
 # lwaiwork 证书有效期监控（替代 certbot 自动续期）
 #
-# 设计：
-#   - 不自动续期（用户决策：85 天前提醒，由专家团协助切换证书）
-#   - 每天 08:00 检查一次所有 live/*/cert.pem 的 notAfter
-#   - 分级告警写日志 + 标志文件（用户 SSH 上去一眼能看到）
+# 设计（2026-09-01 用户决策）：
+#   - LE 等免费证书有效期 90 天
+#   - 用户希望："使用 85 天之后"才开始提醒 = 剩余 ≤ 5 天 开始告警
+#   - 不自动续期（每次到期都让用户决策一次）
+#   - 专家团协助切换证书（脚本见 disable-certbot-auto-renew.sh）
 #
-# 阈值：
-#   remaining >= 85  -> nothing（默认不在监控范围）
-#   85 > r >= 60     -> INFO  '离过期 60-84 天，建议开始准备'
-#   60 > r >= 30     -> WARN  '离过期 30-59 天，请尽快注册新证书'
-#   30 > r >= 7      -> URGENT'离过期 7-29 天'
-#    7 > r >= 0      -> CRIT  '一周内过期！服务即将停服'
-#             r < 0  -> EXPIRED
+# 阈值（剩余天数）：
+#   remaining >= 6   -> OK（不在监控范围）
+#   remaining 4-5    -> INFO  '剩 5 天，建议开始准备'
+#   remaining 2-3    -> WARN  '剩 ≤ 3 天，请尽快注册新证书'
+#   remaining 1      -> URGENT'明天过期！'
+#   remaining 0      -> CRIT  '今天已过期！'
+#             < 0    -> EXPIRED
 #
 # 标志位文件（ls /opt/lwaiwork/.cert-* 一眼可见）：
-#   .cert-action-needed          普通提醒
-#   .cert-action-needed-urgent   紧急
+#   .cert-action-needed          普通提醒（INF/WARN 级别）
+#   .cert-action-needed-urgent   紧急（URGENT/CRIT 级别）
 #   .cert-expired                已过期
 # ============================================================================
 set -u
@@ -27,7 +28,7 @@ LOGFILE=/var/log/lwaiwork-cert-watch.log
 ACTION_DIR=/opt/lwaiwork
 NOW_EPOCH=$(date +%s)
 ONE_DAY=86400
-THRESHOLD=85
+THRESHOLD=5  # 用户决策：剩余 ≤ 5 天开始提醒（90 - 85 = 5）
 
 # 清掉今天之前的待处理标志，每次都从最新结果重算
 rm -f "$ACTION_DIR/.cert-action-needed" "$ACTION_DIR/.cert-action-needed-urgent" "$ACTION_DIR/.cert-expired" 2>/dev/null
@@ -72,11 +73,12 @@ for cert_dir in "$LIVE_DIR"/*/; do
     continue
   fi
 
-  if [ "$remain_days" -lt 7 ]; then
+  # 剩余 0-5 天：分级告警
+  if [ "$remain_days" -eq 0 ]; then
     level=4; level_name=CRIT; marker=".cert-action-needed-urgent"
-  elif [ "$remain_days" -lt 30 ]; then
+  elif [ "$remain_days" -le 1 ]; then
     level=3; level_name=URGENT; marker=".cert-action-needed-urgent"
-  elif [ "$remain_days" -lt 60 ]; then
+  elif [ "$remain_days" -le 3 ]; then
     level=2; level_name=WARN; marker=".cert-action-needed"
   else
     level=1; level_name=INFO; marker=".cert-action-needed"
@@ -89,10 +91,10 @@ done
 
 # 总结行（方便 grep）
 case $MAX_URGENCY in
-  0) echo_log "STATE_OK 全部证书有效期均 ≥ $THRESHOLD 天" ;;
-  1) echo_log "STATE_INFO 最早一张证书 < $THRESHOLD 天（提醒已生效，非紧急）" ;;
-  2) echo_log "STATE_WARN  有证书进入准备期（30-59 天），请安排更换" ;;
-  3) echo_log "STATE_URGENT  有证书 < 30 天" ;;
-  4) echo_log "STATE_CRIT   有证书 < 7 天！" ;;
+  0) echo_log "STATE_OK 全部证书有效期均 ≥ 6 天（剩余 $THRESHOLD 天内才告警）" ;;
+  1) echo_log "STATE_INFO 已进入 5 天提醒窗口" ;;
+  2) echo_log "STATE_WARN  有证书 ≤ 3 天" ;;
+  3) echo_log "STATE_URGENT  有证书 ≤ 1 天" ;;
+  4) echo_log "STATE_CRIT   有证书当天过期！" ;;
   5) echo_log "STATE_EXPIRED 有证书已过期" ;;
 esac

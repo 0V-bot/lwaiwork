@@ -6,18 +6,19 @@
 ## 1. 设计原则
 
 - **不自动续期**（2026-09-01 用户决策）：
-  - Let's Encrypt 证书虽然免费，但续期是"无意识动作"
-  - 用户希望：85 天前 → 提醒 → 用户决定怎么处理（重新走 LE / 切其他 CA）
+  - LE 等免费证书有效期 **90 天**
+  - 用户希望："**使用 85 天之后**"才开始提醒 = **剩余 ≤ 5 天** 触发首次告警
+  - 用户希望：每次到期都让用户决策一次（用 LE / 换其他 CA / 买收费证书）
   - 专家团负责执行切换
 - **预警时间线**（`/opt/lwaiwork/scripts/cert-watch.sh`）：
 
 | 剩余天数 | 等级 | 标志文件 | 你该做什么 |
 | --- | --- | --- | --- |
-| ≥ 85 | OK | — | 无需任何操作 |
-| 60-84 | INFO | `.cert-action-needed` | 准备：登录证书商控制台 / 续费 |
-| 30-59 | WARN | `.cert-action-needed` | 准备 + 联系专家团 |
-| 7-29 | URGENT | `.cert-action-needed-urgent` | **立即**处理 |
-| 0-6 | CRIT | `.cert-action-needed-urgent` | 24h 内必须切换 |
+| ≥ 6 | OK | — | 无需任何操作 |
+| 5 | INFO | `.cert-action-needed` | 准备：登录证书商控制台 / 续费 |
+| 3-4 | WARN | `.cert-action-needed` | 准备 + 联系专家团 |
+| 1-2 | URGENT | `.cert-action-needed-urgent` | **立即**处理 |
+| 0 | CRIT | `.cert-action-needed-urgent` | 24h 内必须切换 |
 | < 0 | EXPIRED | `.cert-expired` | 服务停服中，紧急 |
 
 - **监控频率**：每天 08:00 跑一次 `cert-watch.sh`（crontab）
